@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="plugin.video.langscrape"
+       name="LangScrape"
+       version="0.1.0"
+       provider-name="langscrape">
+  <requires>
+    <import addon="xbmc.python" version="3.0.0"/>
+  </requires>
+  <extension point="xbmc.python.pluginsource" library="default.py">
+    <provides>video</provides>
+  </extension>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="en_GB">Multi-language video search and playback</summary>
+    <description lang="en_GB">Search and browse videos from language-specific providers. Currently supports Aparat (Farsi).</description>
+    <language>en fa</language>
+    <platform>all</platform>
+    <license>GPL-2.0-or-later</license>
+    <assets>
+      <icon>resources/media/icon.png</icon>
+      <fanart>resources/media/fanart.jpg</fanart>
+    </assets>
+  </extension>
+</addon>

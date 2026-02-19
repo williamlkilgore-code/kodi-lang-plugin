@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<settings>
+  <category label="Playback">
+    <setting id="preferred_quality" type="enum" label="Preferred quality" values="Auto|1080|720|480" default="0"/>
+    <setting id="prefer_hls" type="bool" label="Prefer HLS when available" default="false"/>
+    <setting id="useragent_override" type="text" label="User-Agent override (leave blank for default)" default=""/>
+  </category>
+  <category label="Network">
+    <setting id="timeout" type="number" label="Request timeout (seconds)" default="12"/>
+    <setting id="retries" type="number" label="Retry count" default="2"/>
+    <setting id="cache_enabled" type="bool" label="Enable cache" default="true"/>
+    <setting id="cache_ttl_recent" type="number" label="Recent list cache TTL (minutes)" default="10"/>
+    <setting id="cache_ttl_search" type="number" label="Search cache TTL (minutes)" default="20"/>
+    <setting id="cache_ttl_resolve" type="number" label="Stream resolve cache TTL (minutes)" default="2"/>
+  </category>
+  <category label="Debug">
+    <setting id="debug_logging" type="bool" label="Enable debug logging" default="false"/>
+  </category>
+</settings>

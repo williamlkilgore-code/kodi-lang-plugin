@@ -1,0 +1,41 @@
+{
+  "video": {
+    "id": 12345,
+    "title": "آموزش پایتون - درس اول",
+    "uid": "Abc12",
+    "username": "coder_ir",
+    "userid": 999,
+    "visit_cnt": 15000,
+    "big_poster": "https://static.cdn.asset.aparat.com/avt/12345-big.jpg",
+    "duration": 754,
+    "sdate": "2024/06/15 14:30:00",
+    "description": "First Python lesson in Farsi",
+    "file_link": "https://hw1.cdn.asset.aparat.com/aparat-video/Abc12-720p.mp4",
+    "file_link_all": [
+      {
+        "profile": "720p",
+        "urls": [
+          "https://hw1.cdn.asset.aparat.com/aparat-video/Abc12-720p.mp4"
+        ]
+      },
+      {
+        "profile": "480p",
+        "urls": [
+          "https://hw1.cdn.asset.aparat.com/aparat-video/Abc12-480p.mp4"
+        ]
+      },
+      {
+        "profile": "1080p",
+        "urls": [
+          "https://hw1.cdn.asset.aparat.com/aparat-video/Abc12-1080p.mp4"
+        ]
+      },
+      {
+        "profile": "h_720_hls",
+        "urls": [
+          "https://hw1.cdn.asset.aparat.com/aparat-video/Abc12-720p.m3u8"
+        ]
+      }
+    ]
+  }
+}
