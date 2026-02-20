@@ -37,6 +37,11 @@ def show_home(router):
     url = router.build_url(action="aparat.menu")
     items.append((url, li, True))
 
+    # Version indicator (non-clickable)
+    li_ver = xbmcgui.ListItem("[LangScrape v0.2.0]")
+    li_ver.setProperty("IsPlayable", "false")
+    items.append((router.base_url, li_ver, False))
+
     xbmcplugin.addDirectoryItems(router.handle, items, len(items))
     xbmcplugin.endOfDirectory(router.handle)
 
