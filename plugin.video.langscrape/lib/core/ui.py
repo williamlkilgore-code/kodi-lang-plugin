@@ -60,8 +60,12 @@ def show_provider_menu(router, provider_id: str):
     xbmcplugin.endOfDirectory(router.handle)
 
 
-def show_video_list(router, result: ProviderResult, provider_id: str, query: str | None = None):
-    """Render a list of VideoItems as playable Kodi list items."""
+def show_video_list(router, result: ProviderResult, provider_id: str,
+                    query: str | None = None, sort: str | None = None):
+    """Render a list of VideoItems as playable Kodi list items.
+
+    sort values: None (default), "shortest", "longest"
+    """
     if not _IN_KODI:
         return
 
@@ -70,9 +74,46 @@ def show_video_list(router, result: ProviderResult, provider_id: str, query: str
         xbmcplugin.endOfDirectory(router.handle, succeeded=False)
         return
 
+    video_items = list(result.items)
+
+    # Apply sort if requested
+    if sort == "shortest":
+        video_items.sort(key=lambda v: v.duration if v.duration else 999999)
+    elif sort == "longest":
+        video_items.sort(key=lambda v: v.duration if v.duration else 0, reverse=True)
+
+    # Sort toggle items at the top (only for search results)
+    if query:
+        from urllib.parse import urlencode
+        if sort != "shortest":
+            li_sort = xbmcgui.ListItem("[Sort: Shortest first]")
+            params = {"action": "%s.search" % provider_id, "query": query, "sort": "shortest"}
+            if router.params.get("page"):
+                params["page"] = router.params["page"]
+            url_sort = "%s?%s" % (router.base_url, urlencode(params))
+            xbmcplugin.addDirectoryItem(router.handle, url_sort, li_sort, True)
+
+        if sort != "longest":
+            li_sort = xbmcgui.ListItem("[Sort: Longest first]")
+            params = {"action": "%s.search" % provider_id, "query": query, "sort": "longest"}
+            if router.params.get("page"):
+                params["page"] = router.params["page"]
+            url_sort = "%s?%s" % (router.base_url, urlencode(params))
+            xbmcplugin.addDirectoryItem(router.handle, url_sort, li_sort, True)
+
     items = []
-    for video in result.items:
-        li = xbmcgui.ListItem(video.title)
+    for video in video_items:
+        # Format duration in title for visibility
+        label = video.title
+        if video.duration:
+            mins, secs = divmod(video.duration, 60)
+            if mins >= 60:
+                hours, mins = divmod(mins, 60)
+                label = "%s  [%d:%02d:%02d]" % (label, hours, mins, secs)
+            else:
+                label = "%s  [%d:%02d]" % (label, mins, secs)
+
+        li = xbmcgui.ListItem(label)
         li.setProperty("IsPlayable", "true")
 
         info_tag = li.getVideoInfoTag()
@@ -82,8 +123,6 @@ def show_video_list(router, result: ProviderResult, provider_id: str, query: str
             info_tag.setPlot(video.plot)
         if video.duration:
             info_tag.setDuration(video.duration)
-        if video.published:
-            li.setDateTime(video.published.strftime("%Y-%m-%d %H:%M:%S"))
 
         if video.thumb:
             li.setArt({"thumb": video.thumb, "icon": video.thumb})
@@ -103,18 +142,13 @@ def show_video_list(router, result: ProviderResult, provider_id: str, query: str
         if query:
             params["action"] = "%s.search" % provider_id
             params["query"] = query
+        if sort:
+            params["sort"] = sort
         from urllib.parse import urlencode
         url_next = "%s?%s" % (router.base_url, urlencode(params))
         xbmcplugin.addDirectoryItem(router.handle, url_next, li_next, True)
 
     xbmcplugin.setContent(router.handle, "videos")
-
-    # Enable sort methods so user can sort by duration, title, or date
-    xbmcplugin.addSortMethod(router.handle, xbmcplugin.SORT_METHOD_UNSORTED)
-    xbmcplugin.addSortMethod(router.handle, xbmcplugin.SORT_METHOD_DURATION)
-    xbmcplugin.addSortMethod(router.handle, xbmcplugin.SORT_METHOD_TITLE)
-    xbmcplugin.addSortMethod(router.handle, xbmcplugin.SORT_METHOD_DATE)
-
     xbmcplugin.endOfDirectory(router.handle)
 
 

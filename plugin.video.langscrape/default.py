@@ -45,8 +45,9 @@ def _dispatch(router, action):
             query = get_search_query()
         if query:
             page = router.params.get("page")
+            sort = router.params.get("sort")
             result = search(query, page_token=page)
-            show_video_list(router, result, "aparat", query=query)
+            show_video_list(router, result, "aparat", query=query, sort=sort)
 
     elif action == "aparat.play":
         from lib.providers.aparat import resolve

@@ -35,7 +35,8 @@ PROVIDER_ID = "aparat"
 LANGUAGE = "fa"
 BASE_URL = "https://www.aparat.com"
 API_BASE = BASE_URL + "/etc/api"
-PER_PAGE = 20
+PER_PAGE = 50
+MAX_SEARCH_PAGES = 3  # auto-fetch up to this many pages per search
 
 ADDON_ID = "plugin.video.langscrape"
 
@@ -203,36 +204,60 @@ def recent(page_token: str | None = None) -> ProviderResult:
 
 
 def search(query: str, page_token: str | None = None) -> ProviderResult:
-    """Search Aparat for videos matching the query."""
+    """Search Aparat for videos matching the query.
+
+    Auto-fetches up to MAX_SEARCH_PAGES pages and combines the results
+    so the user gets more results in a single listing.
+    """
     encoded_query = quote(query, safe="")
-    endpoint = "videoBySearch/text/%s/perpage/%d" % (encoded_query, PER_PAGE)
-    if page_token:
-        endpoint += "/page/%s" % page_token
+    start_page = int(page_token or "1")
+    all_items: list[VideoItem] = []
+    last_status = 0
 
-    data, status = _fetch_api(endpoint, "search")
-    if not data:
-        log_error("Aparat search: no data for q=%s (status=%d)", query, status)
-        return ProviderResult(diagnostics={"status": status, "error": "no_data"})
+    for page_num in range(start_page, start_page + MAX_SEARCH_PAGES):
+        endpoint = "videoBySearch/text/%s/perpage/%d" % (encoded_query, PER_PAGE)
+        if page_num > 1:
+            endpoint += "/page/%s" % page_num
 
-    raw_list = data.get("videobysearch") or data.get("videoBySearch") or []
-    items = []
-    for v in raw_list:
-        item = _parse_video_item(v)
-        if item:
-            items.append(item)
+        data, status = _fetch_api(endpoint, "search")
+        last_status = status
+        if not data:
+            break
 
-    log_debug("Aparat search q=%s: parsed %d items", query, len(items))
+        raw_list = data.get("videobysearch") or data.get("videoBySearch") or []
+        page_items = []
+        for v in raw_list:
+            item = _parse_video_item(v)
+            if item:
+                page_items.append(item)
 
-    # Always offer next page if we got results
+        log_debug("Aparat search q=%s page=%d: parsed %d items", query, page_num, len(page_items))
+        all_items.extend(page_items)
+
+        # Stop fetching if this page returned no results
+        if not page_items:
+            break
+
+    # Deduplicate by videohash
+    seen: set[str] = set()
+    unique_items: list[VideoItem] = []
+    for item in all_items:
+        key = item.videohash or item.title
+        if key not in seen:
+            seen.add(key)
+            unique_items.append(item)
+
+    log_debug("Aparat search q=%s: %d total unique items", query, len(unique_items))
+
+    # Offer next batch if we got results
     next_page = None
-    if items:
-        current = int(page_token or "1")
-        next_page = str(current + 1)
+    if unique_items:
+        next_page = str(start_page + MAX_SEARCH_PAGES)
 
     return ProviderResult(
-        items=items,
+        items=unique_items,
         next_page_token=next_page,
-        diagnostics={"status": status, "count": len(items), "query": query},
+        diagnostics={"status": last_status, "count": len(unique_items), "query": query},
     )
 
 
