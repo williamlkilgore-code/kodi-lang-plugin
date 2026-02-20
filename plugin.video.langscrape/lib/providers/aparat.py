@@ -8,6 +8,10 @@ API endpoints (public, undocumented REST):
   - By tag:       GET https://www.aparat.com/etc/api/videobytag/text/{TAG}
   - Recommend:    GET https://www.aparat.com/etc/api/videoRecom/videohash/{HASH}/perpage/{N}
 
+Responses include a "ui" object with pagination:
+  ui.pagingForward - full URL for next page (or empty if no more)
+  ui.pagingBack    - full URL for previous page
+
 Video info response shape (key: "video"):
   id, title, username, userid, visit_cnt, uid (videohash),
   big_poster, small_poster, duration, sdate, description,
@@ -36,7 +40,7 @@ LANGUAGE = "fa"
 BASE_URL = "https://www.aparat.com"
 API_BASE = BASE_URL + "/etc/api"
 PER_PAGE = 50
-MAX_SEARCH_PAGES = 3  # auto-fetch up to this many pages per search
+MAX_AUTO_PAGES = 5  # auto-fetch up to this many pages per listing
 
 ADDON_ID = "plugin.video.langscrape"
 
@@ -150,6 +154,11 @@ def _parse_date(sdate: str) -> datetime | None:
 def _fetch_api(endpoint: str, cache_kind: str = "recent") -> tuple[Any, int]:
     """Fetch an Aparat API endpoint with caching."""
     url = "%s/%s" % (API_BASE, endpoint)
+    return _fetch_url(url, cache_kind)
+
+
+def _fetch_url(url: str, cache_kind: str = "recent") -> tuple[Any, int]:
+    """Fetch a full URL with caching."""
     ttl = _cache_ttl(cache_kind)
 
     cached = cache.get(url, ttl)
@@ -166,39 +175,87 @@ def _fetch_api(endpoint: str, cache_kind: str = "recent") -> tuple[Any, int]:
     return data, status
 
 
+def _get_paging_forward(data: Any) -> str | None:
+    """Extract the next-page URL from the API response ui object."""
+    if not isinstance(data, dict):
+        return None
+    ui = data.get("ui")
+    if isinstance(ui, dict):
+        fwd = ui.get("pagingForward") or ""
+        if fwd and isinstance(fwd, str) and fwd.startswith("http"):
+            return fwd
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Provider contract: recent / search / resolve
 # ---------------------------------------------------------------------------
 
+def _multi_fetch(first_url: str, list_key: str, cache_kind: str) -> tuple[list[VideoItem], str | None, int]:
+    """Fetch up to MAX_AUTO_PAGES pages, following ui.pagingForward links.
+
+    Returns (items, next_page_url_or_None, last_status).
+    """
+    all_items: list[VideoItem] = []
+    next_url: str | None = first_url
+    last_status = 0
+    last_paging_forward: str | None = None
+
+    for page_num in range(MAX_AUTO_PAGES):
+        if not next_url:
+            break
+
+        data, status = _fetch_url(next_url, cache_kind)
+        last_status = status
+        if not data:
+            log_error("No data from %s (status=%d)", next_url[:120], status)
+            break
+
+        # Try multiple possible response keys
+        raw_list = data.get(list_key) or data.get(list_key.lower()) or []
+        page_items = []
+        for v in raw_list:
+            item = _parse_video_item(v)
+            if item:
+                page_items.append(item)
+
+        log_debug("Page %d: parsed %d items from key '%s'", page_num + 1, len(page_items), list_key)
+        all_items.extend(page_items)
+
+        if not page_items:
+            break
+
+        # Follow pagination link from API response
+        last_paging_forward = _get_paging_forward(data)
+        next_url = last_paging_forward
+
+    # Deduplicate by videohash
+    seen: set[str] = set()
+    unique: list[VideoItem] = []
+    for item in all_items:
+        key = item.videohash or item.title
+        if key not in seen:
+            seen.add(key)
+            unique.append(item)
+
+    return unique, last_paging_forward, last_status
+
+
 def recent(page_token: str | None = None) -> ProviderResult:
     """Fetch recent/popular videos from Aparat."""
-    endpoint = "categoryVideos/cat/1/perpage/%d" % PER_PAGE
-    if page_token:
-        endpoint += "/page/%s" % page_token
+    if page_token and page_token.startswith("http"):
+        # page_token is a full pagingForward URL from a previous call
+        first_url = page_token
+    else:
+        first_url = "%s/categoryVideos/cat/1/perpage/%d" % (API_BASE, PER_PAGE)
 
-    data, status = _fetch_api(endpoint, "recent")
-    if not data:
-        log_error("Aparat recent: no data (status=%d)", status)
-        return ProviderResult(diagnostics={"status": status, "error": "no_data"})
+    items, next_url, status = _multi_fetch(first_url, "categoryvideos", "recent")
 
-    raw_list = data.get("categoryvideos") or data.get("categoryVideos") or []
-    items = []
-    for v in raw_list:
-        item = _parse_video_item(v)
-        if item:
-            items.append(item)
-
-    log_debug("Aparat recent: parsed %d items", len(items))
-
-    # Determine next page token — always offer next page if we got results
-    next_page = None
-    if items:
-        current = int(page_token or "1")
-        next_page = str(current + 1)
+    log_debug("Aparat recent: %d total items", len(items))
 
     return ProviderResult(
         items=items,
-        next_page_token=next_page,
+        next_page_token=next_url,
         diagnostics={"status": status, "count": len(items)},
     )
 
@@ -206,58 +263,23 @@ def recent(page_token: str | None = None) -> ProviderResult:
 def search(query: str, page_token: str | None = None) -> ProviderResult:
     """Search Aparat for videos matching the query.
 
-    Auto-fetches up to MAX_SEARCH_PAGES pages and combines the results
-    so the user gets more results in a single listing.
+    Auto-fetches up to MAX_AUTO_PAGES pages following the API's
+    ui.pagingForward links, combining and deduplicating results.
     """
-    encoded_query = quote(query, safe="")
-    start_page = int(page_token or "1")
-    all_items: list[VideoItem] = []
-    last_status = 0
+    if page_token and page_token.startswith("http"):
+        first_url = page_token
+    else:
+        encoded_query = quote(query, safe="")
+        first_url = "%s/videoBySearch/text/%s/perpage/%d" % (API_BASE, encoded_query, PER_PAGE)
 
-    for page_num in range(start_page, start_page + MAX_SEARCH_PAGES):
-        endpoint = "videoBySearch/text/%s/perpage/%d" % (encoded_query, PER_PAGE)
-        if page_num > 1:
-            endpoint += "/page/%s" % page_num
+    items, next_url, status = _multi_fetch(first_url, "videobysearch", "search")
 
-        data, status = _fetch_api(endpoint, "search")
-        last_status = status
-        if not data:
-            break
-
-        raw_list = data.get("videobysearch") or data.get("videoBySearch") or []
-        page_items = []
-        for v in raw_list:
-            item = _parse_video_item(v)
-            if item:
-                page_items.append(item)
-
-        log_debug("Aparat search q=%s page=%d: parsed %d items", query, page_num, len(page_items))
-        all_items.extend(page_items)
-
-        # Stop fetching if this page returned no results
-        if not page_items:
-            break
-
-    # Deduplicate by videohash
-    seen: set[str] = set()
-    unique_items: list[VideoItem] = []
-    for item in all_items:
-        key = item.videohash or item.title
-        if key not in seen:
-            seen.add(key)
-            unique_items.append(item)
-
-    log_debug("Aparat search q=%s: %d total unique items", query, len(unique_items))
-
-    # Offer next batch if we got results
-    next_page = None
-    if unique_items:
-        next_page = str(start_page + MAX_SEARCH_PAGES)
+    log_debug("Aparat search q=%s: %d total unique items", query, len(items))
 
     return ProviderResult(
-        items=unique_items,
-        next_page_token=next_page,
-        diagnostics={"status": last_status, "count": len(unique_items), "query": query},
+        items=items,
+        next_page_token=next_url,
+        diagnostics={"status": status, "count": len(items), "query": query},
     )
 
 
