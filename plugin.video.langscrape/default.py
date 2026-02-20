@@ -3,15 +3,24 @@ plugin.video.langscrape - Multi-language video search and playback for Kodi.
 Entry point: parses plugin URL and dispatches to the appropriate action.
 """
 import sys
+import traceback
 
 from lib.core.router import Router
-from lib.core.log import log_debug
+from lib.core.log import log_debug, log_error
 
 
 def main():
     router = Router(sys.argv)
     action = router.params.get("action", "home")
     log_debug("Dispatching action=%s params=%s", action, router.params)
+
+    try:
+        _dispatch(router, action)
+    except Exception:
+        log_error("Unhandled exception:\n%s", traceback.format_exc())
+
+
+def _dispatch(router, action):
 
     if action == "home":
         from lib.core.ui import show_home

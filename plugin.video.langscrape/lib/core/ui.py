@@ -5,6 +5,7 @@ from lib.core.log import log_debug, log_error, log_info
 from lib.core.models import ProviderResult, StreamInfo
 
 try:
+    import xbmc
     import xbmcgui
     import xbmcplugin
 
