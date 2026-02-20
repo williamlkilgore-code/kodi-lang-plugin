@@ -82,6 +82,8 @@ def show_video_list(router, result: ProviderResult, provider_id: str, query: str
             info_tag.setPlot(video.plot)
         if video.duration:
             info_tag.setDuration(video.duration)
+        if video.published:
+            li.setDateTime(video.published.strftime("%Y-%m-%d %H:%M:%S"))
 
         if video.thumb:
             li.setArt({"thumb": video.thumb, "icon": video.thumb})
@@ -106,6 +108,13 @@ def show_video_list(router, result: ProviderResult, provider_id: str, query: str
         xbmcplugin.addDirectoryItem(router.handle, url_next, li_next, True)
 
     xbmcplugin.setContent(router.handle, "videos")
+
+    # Enable sort methods so user can sort by duration, title, or date
+    xbmcplugin.addSortMethod(router.handle, xbmcplugin.SORT_METHOD_UNSORTED)
+    xbmcplugin.addSortMethod(router.handle, xbmcplugin.SORT_METHOD_DURATION)
+    xbmcplugin.addSortMethod(router.handle, xbmcplugin.SORT_METHOD_TITLE)
+    xbmcplugin.addSortMethod(router.handle, xbmcplugin.SORT_METHOD_DATE)
+
     xbmcplugin.endOfDirectory(router.handle)
 
 

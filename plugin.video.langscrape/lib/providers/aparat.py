@@ -189,9 +189,9 @@ def recent(page_token: str | None = None) -> ProviderResult:
 
     log_debug("Aparat recent: parsed %d items", len(items))
 
-    # Determine next page token
+    # Determine next page token — always offer next page if we got results
     next_page = None
-    if len(items) >= PER_PAGE:
+    if items:
         current = int(page_token or "1")
         next_page = str(current + 1)
 
@@ -223,8 +223,9 @@ def search(query: str, page_token: str | None = None) -> ProviderResult:
 
     log_debug("Aparat search q=%s: parsed %d items", query, len(items))
 
+    # Always offer next page if we got results
     next_page = None
-    if len(items) >= PER_PAGE:
+    if items:
         current = int(page_token or "1")
         next_page = str(current + 1)
 
